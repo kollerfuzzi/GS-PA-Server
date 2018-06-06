@@ -15,7 +15,7 @@ import java.util.Arrays;
 public abstract class ServerMain {
 
     private static final int FINALPORT = 80;
-    private static final int LOCALHOSTPORT = 8080;
+    private static final int LOCALHOSTPORT = 8089;
     private static boolean USELOCALPORT = true; //if true, port for local use; if false it uses the final port (port of the server)
     private final int PORTNR;
     private JTextComponent taLog;
