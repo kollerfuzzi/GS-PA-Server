@@ -27,14 +27,23 @@ public class ScoreBoard {
         playerMap.get(playerID).setKills(playerMap.get(playerID).getKills()+1);
     }
     
-    public void playerDeath(String playerID){
+    public void playerDeath(String playerID, String killerID){
+        System.out.println("PlayerID= " + playerID);
+        playerMap.get(playerID).setDeaths(playerMap.get(playerID).getDeaths()+1);
+        playerKill(killerID);
+    }
+    public void playerDeathHimselfe(String playerID) {
         playerMap.get(playerID).setDeaths(playerMap.get(playerID).getDeaths()+1);
     }
     
     public void playerJoin(String PlayerID) {
         playerMap.put(PlayerID, new SinglePlayerData(0, 0, -1, LocalDateTime.now()));
     }
-
+    
+    public void playerShotBy(String victomID, String killerID){
+        playerMap.get(victomID).setLastShotPlayerID(killerID);
+    }
+    
     public boolean checkIfPlayerExists(String PlayerID) {
         return playerMap.containsKey(PlayerID);
     }
@@ -44,6 +53,9 @@ public class ScoreBoard {
             playerMap.remove(PlayerID);
         }
         System.out.println("Player not in scoreBoard any more.");
+    }
+    public String getKillerof(String PlayerID){
+        return playerMap.get(PlayerID).getLastShotPlayerID();
     }
 
     public void updatePing(PingPacket pingPackerl) {
@@ -71,6 +83,8 @@ public class ScoreBoard {
         return data;
     }
 
+    
+
     private class SinglePlayerData {
 
         //private String PlayerID; //username
@@ -78,14 +92,27 @@ public class ScoreBoard {
         private int deaths;
         private double ping; //-1 = kein ping
         private LocalDateTime join;
+        private String lastShotPlayerID;
 
         public SinglePlayerData(int kills, int deaths, double ping, LocalDateTime join) {
             this.kills = kills;
             this.deaths = deaths;
             this.ping = ping;
             this.join = join;
+            this.lastShotPlayerID = null;
         }
 
+        public String getLastShotPlayerID() {
+            return lastShotPlayerID;
+        }
+
+        public void setLastShotPlayerID(String lastShotPlayerID) {
+            this.lastShotPlayerID = lastShotPlayerID;
+        }
+
+        
+                
+                
         public int getKills() {
             return kills;
         }

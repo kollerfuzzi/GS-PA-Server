@@ -1,5 +1,7 @@
 package mygame;
 
+import beans.Damage;
+import beans.PingPacket;
 import beans.PlayerData;
 import beans.PlayerStatus;
 import beans.ScoreBoard;
@@ -58,7 +60,7 @@ public abstract class ServerMain {
 
         serverFrame.setLayout(new BorderLayout());
         jsp = new JScrollPane(taLog);
-        
+
         serverFrame.add(jsp, BorderLayout.CENTER);
 
         btStartStopServer = new JButton("startServer");
@@ -114,13 +116,20 @@ public abstract class ServerMain {
 
     protected void log(String message) {
         if (taLog != null) {
-           taLog.setText(taLog.getText() + "\n" + message);
+            taLog.setText(taLog.getText() + "\n" + message);
         } else {
             System.out.println(message);
         }
     }
 
     public void startServer() {
+        
+        if (st != null) {
+            st = null;
+            log("server was set to null");
+        }
+        
+        log("starting server initiated");
         if (st == null || !st.isAlive()) {
 
             try {
@@ -132,6 +141,15 @@ public abstract class ServerMain {
                 serverIsRunning = false;
             }
         }
+    }
+
+    public void stopServer() {
+        if (st != null && st.isAlive()) {
+            st.interrupt();
+        }
+        log("Socket is closed #C02");
+        serverIsRunning = false;
+
     }
 
     private void broadcastObj(Object obj, ClientCommunicationThread sender) throws IOException {
@@ -149,13 +167,8 @@ public abstract class ServerMain {
         }
     }
 
-    public void stopServer() {
-        if (st != null && st.isAlive()) {
-            st.interrupt();
-        }
-        log("Socket is closed #C02");
-        serverIsRunning = false;
-
+    private void unicasttObj(Object obj, ClientCommunicationThread sender) throws IOException {
+        sender.oos.writeObject(obj);
     }
 
     class ServerThread extends Thread {
@@ -222,12 +235,23 @@ public abstract class ServerMain {
                     //log("Server receaved: " + request + "#09");
                     if (request instanceof PlayerStatus) {
                         handlePlayerStatusRequest(request);
-                    }
-                    if (request instanceof PlayerData) {
+                    } else if (request instanceof PlayerData) {
                         handlePlayerDataRequest(request);
 
                     } else if (request instanceof String) {
                         handleStringRequest(request);
+                    } else if (request instanceof Damage) {
+                        Damage damage = (Damage) request;
+                        damage.getPlayer();
+                        scoreBoard.playerShotBy(player.getPlayerID(), damage.getPlayer());
+                        broadcastObj(request, this);
+                    } else if (request.toString().toLowerCase().equals("brodcast")) {
+                        unicasttObj(request, this);
+                    } else if (request instanceof PingPacket) {
+                        PingPacket pipa = (PingPacket) request;
+                        scoreBoard.updatePing(pipa);
+                    } else if (request.toString().toLowerCase().equals("gimmiscoreboardnowwwww")) {
+                        unicasttObj(scoreBoard.getScoreBoardData(), this);
                     } else {
                         broadcastObj(request, this);
                     }
@@ -259,19 +283,39 @@ public abstract class ServerMain {
             this.player = player;
         }
 
-        private void handlePlayerStatusRequest(Object request) {
+        /*
+        public enum Type {
+            LOGGED_IN, PLAYING, DEAD, KILLEDHIMSELF, DISCONNECTED
+        }
+         */
+        private void handlePlayerStatusRequest(Object request) throws IOException {
             log("PlayerStatusRequest: " + request.toString() + "C14");
             PlayerStatus ps = (PlayerStatus) request;
-            if (ps.getType().equals(PlayerStatus.Type.LOGGED_IN)) {
-                scoreBoard.playerJoin(ps.getPlayerID());
-            } else if (ps.getType().equals(PlayerStatus.Type.DISCONNECTED)) {
-                scoreBoard.playerDisconnect(ps.getPlayerID());
-                for (ClientCommunicationThread clientCommunicationThread : cliComList) {
-                    if (clientCommunicationThread.getPlayer().getPlayerID().equals(ps.getPlayerID())) {
-                        clientCommunicationThread.interrupt();
+            switch (ps.getType()) {
+                case LOGGED_IN:
+                    scoreBoard.playerJoin(ps.getPlayerID());
+                    broadcastObj(ps.getPlayerID() + " has joined the game", null);
+                    break;
+                case DISCONNECTED:
+                    scoreBoard.playerDisconnect(ps.getPlayerID());
+                    for (ClientCommunicationThread clientCommunicationThread : cliComList) {
+                        if (clientCommunicationThread.getPlayer().getPlayerID().equals(ps.getPlayerID())) {
+                            clientCommunicationThread.interrupt();
+                        }
                     }
-                }
-
+                    broadcastObj(ps.getPlayerID() + " has left the game", null);
+                    break;
+                case DEAD:
+                    scoreBoard.playerDeath(ps.getPlayerID(), scoreBoard.getKillerof(ps.getPlayerID()));
+                    broadcastObj(scoreBoard.getKillerof(ps.getPlayerID()) + " killed " + ps.getPlayerID(), null);
+                    break;
+                case KILLEDHIMSELF:
+                    scoreBoard.playerDeathHimselfe(ps.getPlayerID());
+                    broadcastObj(ps.getPlayerID() + " committed suicide", null);
+                    break;
+                default:
+                    log("unhandeled StatusRequest " + request);
+                    break;
             }
 
         }
