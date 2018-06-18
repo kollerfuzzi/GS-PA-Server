@@ -1,6 +1,8 @@
 package mygame;
 
 import beans.PlayerData;
+import beans.PlayerStatus;
+import beans.ScoreBoard;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -23,6 +25,7 @@ import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 
 public abstract class ServerMain {
@@ -33,6 +36,7 @@ public abstract class ServerMain {
     private static final int LOCALHOSTPORT = 8089;
     private static boolean USELOCALPORT = true; //if true, port for local use; if false it uses the final port (port of the server)
     private final int PORTNR;
+    private JScrollPane jsp;
     private JTextArea taLog;
     private ServerThread st;
     private ArrayList<ClientCommunicationThread> cliComList = new ArrayList<ClientCommunicationThread>();
@@ -41,42 +45,46 @@ public abstract class ServerMain {
     private JButton btStartStopServer;
     private JLabel lbTimeRunning;
     private JPanel jpInput;
-    
-    private void initComponents(){
+    private ScoreBoard scoreBoard;
+
+    private void initComponents() {
         serverFrame = new JFrame("GSPA - Server");
         serverFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         serverFrame.setSize(new Dimension(500, 300));
         serverFrame.setLocationRelativeTo(null);
         serverFrame.setVisible(true);
         taLog = new JTextArea();
-        
+        scoreBoard = new ScoreBoard();
+
         serverFrame.setLayout(new BorderLayout());
-        serverFrame.add(taLog, BorderLayout.CENTER);
+        jsp = new JScrollPane(taLog);
         
+        serverFrame.add(jsp, BorderLayout.CENTER);
+
         btStartStopServer = new JButton("startServer");
         btStartStopServer.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                if(serverIsRunning==false){
+                if (serverIsRunning == false) {
                     startServer();
-                }else{
+                } else {
                     stopServer();
                 }
             }
         });
-        
+
         lbTimeRunning = new JLabel("0");
         jpInput = new JPanel(new GridLayout(1, 2));
         jpInput.add(btStartStopServer);
         jpInput.add(lbTimeRunning);
-        
+
         Thread t1 = new UpdateBtn();
         t1.start();
-        
+
         serverFrame.add(jpInput, BorderLayout.SOUTH);
-        
+
     }
-    
+
     public static void main(String[] args) {
         ServerMain obj = new ServerMain() {
             @Override
@@ -84,17 +92,17 @@ public abstract class ServerMain {
                 return request;
             }
         };
-        if(CLI == true){
+        if (CLI == true) {
             obj.startServer();
-        }else{
+        } else {
             obj.initComponents();
-        }  
+        }
     }
-    
+
     public ServerMain(int portnr) {
         this.PORTNR = portnr;
     }
-    
+
     public ServerMain(int PORTNR, JTextArea taLog) {
         this(PORTNR);
         this.taLog = taLog;
@@ -106,7 +114,7 @@ public abstract class ServerMain {
 
     protected void log(String message) {
         if (taLog != null) {
-            taLog.setText(taLog.getText() + "\n" + message);
+           taLog.setText(taLog.getText() + "\n" + message);
         } else {
             System.out.println(message);
         }
@@ -132,9 +140,9 @@ public abstract class ServerMain {
                 if (sender != cct) {
                     try {
                         cct.oos.writeObject(obj);
-                        System.out.println("Sent to: " + cct.getPlayer().getPlayerID()+ " from: " + sender.getPlayer().getPlayerID()+ " data: " + obj);
-                    } catch (NullPointerException e ) {
-                       
+                        //log("Sent to: " + cct.getPlayer().getPlayerID() + " from: " + sender.getPlayer().getPlayerID() + " data: " + obj);
+                    } catch (NullPointerException e) {
+
                     }
                 }
             }
@@ -147,7 +155,7 @@ public abstract class ServerMain {
         }
         log("Socket is closed #C02");
         serverIsRunning = false;
-        
+
     }
 
     class ServerThread extends Thread {
@@ -211,21 +219,15 @@ public abstract class ServerMain {
 
                 Object request = null;
                 while (!(request = ois.readObject()).toString().toLowerCase().equals("exit")) {
-                    log("Server receaved: " + request + "#09");
+                    //log("Server receaved: " + request + "#09");
+                    if (request instanceof PlayerStatus) {
+                        handlePlayerStatusRequest(request);
+                    }
                     if (request instanceof PlayerData) {
-                        player = (PlayerData) request;
-                        //System.out.println("PlayerData received: " + player.getPlayerID() + " at " + player.getPosition());
-                        broadcastObj(request, this);
+                        handlePlayerDataRequest(request);
+
                     } else if (request instanceof String) {
-                        switch((String)request) {
-                            case "TEAMS":
-                                oos.writeObject(teams);
-                                System.out.println(teams);
-                                System.out.println("TEAMS SENT!!!");
-                                break;
-                            default:
-                                oos.writeObject("what?");
-                        }
+                        handleStringRequest(request);
                     } else {
                         broadcastObj(request, this);
                     }
@@ -241,12 +243,12 @@ public abstract class ServerMain {
 
             synchronized (cliComList) {
                 cliComList.remove(this);
+                if (player != null) {
+                    scoreBoard.playerDisconnect(player.getPlayerID());
+                }
                 log("Client removed from Client list#C13");
             }
 
-            synchronized (cliComList) {
-                cliComList.remove(this);
-            }
         }
 
         public PlayerData getPlayer() {
@@ -256,28 +258,62 @@ public abstract class ServerMain {
         public void setPlayer(PlayerData player) {
             this.player = player;
         }
-        
-        
+
+        private void handlePlayerStatusRequest(Object request) {
+            log("PlayerStatusRequest: " + request.toString() + "C14");
+            PlayerStatus ps = (PlayerStatus) request;
+            if (ps.getType().equals(PlayerStatus.Type.LOGGED_IN)) {
+                scoreBoard.playerJoin(ps.getPlayerID());
+            } else if (ps.getType().equals(PlayerStatus.Type.DISCONNECTED)) {
+                scoreBoard.playerDisconnect(ps.getPlayerID());
+                for (ClientCommunicationThread clientCommunicationThread : cliComList) {
+                    if (clientCommunicationThread.getPlayer().getPlayerID().equals(ps.getPlayerID())) {
+                        clientCommunicationThread.interrupt();
+                    }
+                }
+
+            }
+
+        }
+
+        private void handlePlayerDataRequest(Object request) throws IOException {
+            player = (PlayerData) request;
+            //System.out.println("PlayerData received: " + player.getPlayerID() + " at " + player.getPosition());
+            broadcastObj(request, this);
+        }
+
+        private void handleStringRequest(Object request) throws IOException {
+            switch ((String) request) {
+                case "TEAMS":
+                    oos.writeObject(teams);
+                    System.out.println(teams);
+                    System.out.println("TEAMS SENT!!!");
+                    break;
+                default:
+                    oos.writeObject("what?");
+            }
+        }
+
     }
 
     protected abstract Object performRequest(Object request);
-    
-    public class UpdateBtn extends Thread{
+
+    public class UpdateBtn extends Thread {
 
         @Override
         public void run() {
-            while(!interrupted()){
+            while (!interrupted()) {
                 try {
-                    if(serverIsRunning == true){
+                    if (serverIsRunning == true) {
                         btStartStopServer.setText("Stop server.");
                         btStartStopServer.setBackground(Color.green);
-                        if(lbTimeRunning != null){
-                            lbTimeRunning.setText((1+Integer.parseInt(lbTimeRunning.getText()))+"");
+                        if (lbTimeRunning != null) {
+                            lbTimeRunning.setText((1 + Integer.parseInt(lbTimeRunning.getText())) + "");
                         }
-                    }else{
+                    } else {
                         btStartStopServer.setText("Start server.");
                         btStartStopServer.setBackground(Color.red);
-                        if(lbTimeRunning != null){
+                        if (lbTimeRunning != null) {
                             lbTimeRunning.setText("0");
                         }
                     }
@@ -287,7 +323,7 @@ public abstract class ServerMain {
                 }
             }
         }
-    
+
     }
 
 }
