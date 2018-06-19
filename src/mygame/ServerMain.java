@@ -262,7 +262,9 @@ public abstract class ServerMain {
             serverIsRunning = false;
         }
     }
-
+    /**
+     * The ClientCommunicationThread keeps an steady connection with the player till the player disconnects from the game.
+     */
     class ClientCommunicationThread extends Thread {
 
         private Socket socket;
@@ -285,7 +287,7 @@ public abstract class ServerMain {
                 oos = new ObjectOutputStream(socket.getOutputStream());
 
                 Object request = null;
-                while (!(request = ois.readObject()).toString().toLowerCase().equals("exit")) {
+                while (!(request = ois.readObject()).toString().toLowerCase().equals("exit")) {       //check what kind of request the client sends.
                     //log("Server receaved: " + request + "#09");
                     if (request instanceof PlayerStatus) {
                         handlePlayerStatusRequest(request);
@@ -326,7 +328,7 @@ public abstract class ServerMain {
             synchronized (cliComList) {
                 cliComList.remove(this);
                 if (player != null) {
-                    scoreBoard.playerDisconnect(player.getPlayerID());
+                    scoreBoard.playerDisconnect(player.getPlayerID());       //player gets thrown out of the scoreBoard
                 }
                 log("Client removed from Client list#C13");
             }
@@ -343,7 +345,7 @@ public abstract class ServerMain {
 
         
 
-        private void handlePlayerStatusRequest(Object request) throws IOException {
+        private void handlePlayerStatusRequest(Object request) throws IOException { //handels ingoing playerstatus (like logged_in, disconnected, dead...
             log("PlayerStatusRequest: " + request.toString() + "C14");
             PlayerStatus ps = (PlayerStatus) request;
             broadcastObj(request, this);
@@ -392,13 +394,13 @@ public abstract class ServerMain {
 
         }
 
-        private void handlePlayerDataRequest(Object request) throws IOException {
-            player = (PlayerData) request;
+        private void handlePlayerDataRequest(Object request) throws IOException {  //playerdata is the current position of the player. 
+            player = (PlayerData) request;                                      //The client sends its own playerdata and the server sends it to the other players.
             //System.out.println("PlayerData received: " + player.getPlayerID() + " at " + player.getPosition());
             broadcastObj(request, this);
         }
 
-        private void handleStringRequest(Object request) throws IOException {
+        private void handleStringRequest(Object request) throws IOException { //was intendet to handle plain strings but is not used. Teams could easily be added in the future. 
             switch ((String) request) {
                 case "TEAMS":
                     oos.writeObject(teams);
@@ -413,6 +415,9 @@ public abstract class ServerMain {
 
     protected abstract Object performRequest(Object request);
 
+    /**
+     * updates the serverGUI start/stopp button
+     */
     public class UpdateBtn extends Thread {
 
         @Override
@@ -440,7 +445,11 @@ public abstract class ServerMain {
         }
 
     }
-
+    
+    /**
+     * Thread to handles rounds. 
+     * The duration of those, when the next starts and so on.
+     */
     private class RoundThread extends Thread {
 
         private boolean roundHasStarted = false;
@@ -506,7 +515,7 @@ public abstract class ServerMain {
                 Timer timer = new Timer(2000, new ActionListener() {
                     boolean alreadyTriggert = false;
                 @Override
-                public void actionPerformed(ActionEvent e) {
+                public void actionPerformed(ActionEvent e) { //This is a Timer to start a new round a couple seconds after this Object gets destroyed.
                     try {
                         if(!alreadyTriggert){
                             initiateNewRound();
