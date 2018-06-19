@@ -5,11 +5,13 @@
  */
 package beans;
 
+import java.io.Serializable;
+
 /**
  *
  * @author alex
  */
-public class PingPacket {
+public class PingPacket implements Serializable{
     private String PlayerID;
     private double pingValue;
 
