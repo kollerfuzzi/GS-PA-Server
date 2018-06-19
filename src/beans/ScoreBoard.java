@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /**
- *
+ * Server class to manage and store the scoreboard
  * @author alex
  */
 public class ScoreBoard {
